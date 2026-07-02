@@ -1,0 +1,92 @@
+name: Build & Deploy (static site)
+
+# Fetches fresh eBird data, commits the accumulated history back to the repo,
+# builds the static export, and publishes it to GitHub Pages.
+on:
+  schedule:
+    - cron: "0 10 * * *" # 10:00 UTC ≈ 5-6am ET: yesterday (ET) is complete, data fresh for a morning outing
+  workflow_dispatch: {}
+  push:
+    branches: [main]
+    paths:
+      - "frontend/**"
+      - "pipeline/**"
+      - "config.json"
+      - ".github/workflows/deploy.yml"
+
+permissions:
+  contents: write # the run commits new data/history/ day files
+  pages: write
+  id-token: write
+
+# Serialize ALL writers of data/ (deploy + backfill share this group). Never
+# cancel an in-flight run — it may be mid-commit or mid-backfill.
+concurrency:
+  group: data-and-pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      # --- 1. Fetch eBird data + update committed history (Python) ---
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install pipeline
+        run: pip install -e .
+      - name: Fetch data & export JSON to frontend/public/data
+        env:
+          EBIRD_API_KEY: ${{ secrets.EBIRD_API_KEY }}
+        run: python -m pipeline.update
+      # Commit BEFORE the frontend build so fetched history survives a build failure.
+      # GITHUB_TOKEN pushes don't trigger new workflow runs, so no recursion.
+      - name: Commit new history day-files
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data/
+          if git diff --cached --quiet; then
+            echo "no new history"
+          else
+            git commit -m "data: history $(date -u +%F)"
+            git pull --rebase origin main
+            git push
+          fi
+
+      # --- 2. Build the static export (Node) ---
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Install frontend
+        working-directory: frontend
+        run: npm install --no-audit --no-fund
+      # The /BirdTracker base path is hardcoded in next.config.mjs.
+      - name: Build static site (static export -> frontend/out)
+        working-directory: frontend
+        run: npm run build
+      # Safety net: stop GitHub Pages from running Jekyll, which would strip the
+      # _next/ folder (leading underscore) and 404 every JS/CSS asset.
+      - name: Disable Jekyll on the artifact
+        run: touch frontend/out/.nojekyll
+
+      # --- 3. Upload the artifact for Pages ---
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: frontend/out
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

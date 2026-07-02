@@ -1,0 +1,63 @@
+name: Backfill history
+
+# One-time (and occasional) loader of daily region species lists. Resumable:
+# existing day files are skipped, so rerunning a range never re-fetches.
+# 2 regions x 730 days ≈ 1,460 calls ≈ 45 min at the default 1.5s spacing.
+#
+# NOTE: the bot commit does NOT auto-trigger the deploy workflow (GITHUB_TOKEN
+# rule) — dispatch "Build & Deploy" afterwards, or wait for the nightly cron.
+on:
+  workflow_dispatch:
+    inputs:
+      start_date:
+        description: "Start date (YYYY-MM-DD)"
+        required: true
+      end_date:
+        description: "End date (YYYY-MM-DD, must be before today ET)"
+        required: true
+      sleep:
+        description: "Seconds between API calls"
+        default: "1.5"
+
+permissions:
+  contents: write
+
+# Shares the writer lock with deploy.yml; queued, never cancelled mid-run.
+concurrency:
+  group: data-and-pages
+  cancel-in-progress: false
+
+jobs:
+  backfill:
+    runs-on: ubuntu-latest
+    timeout-minutes: 350
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install pipeline
+        run: pip install -e .
+      - name: Fetch historic day files
+        env:
+          EBIRD_API_KEY: ${{ secrets.EBIRD_API_KEY }}
+        run: >
+          python -m pipeline.backfill
+          --start "${{ inputs.start_date }}"
+          --end "${{ inputs.end_date }}"
+          --sleep "${{ inputs.sleep }}"
+      # Crash-safe: even a failed/cancelled run commits what it fetched;
+      # rerunning the same range resumes from there.
+      - name: Commit whatever was fetched
+        if: always()
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data/
+          if git diff --cached --quiet; then
+            echo "no new history"
+          else
+            git commit -m "data: backfill ${{ inputs.start_date }}..${{ inputs.end_date }}"
+            git pull --rebase origin main
+            git push
+          fi
