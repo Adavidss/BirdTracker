@@ -1,0 +1,8 @@
+{
+  "center": { "lat": 38.99, "lng": -76.94 },
+  "radius_km": 25,
+  "regions": ["US-DC", "US-MD-033"],
+  "recent_window_days": 14,
+  "catchup_days": 8,
+  "min_seasonality_days": 3
+}

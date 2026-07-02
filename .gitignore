@@ -1,0 +1,25 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+*.egg-info/
+
+# Node / Next.js
+frontend/node_modules/
+frontend/.next/
+frontend/out/
+frontend/.preview/
+*.tsbuildinfo
+
+# Secrets
+.env
+
+# Generated site data — rebuilt by `python -m pipeline.update`.
+# (The committed, accumulating state lives in data/, not here.)
+frontend/public/data/
+
+# OS noise
+.DS_Store
