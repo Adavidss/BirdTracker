@@ -1,0 +1,63 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Light is the :root default; `.dark` (set on <html>) overrides. The palette is
+   RGB triplets so Tailwind's `/alpha` modifiers work. */
+:root {
+  color-scheme: light;
+  --c-canvas: 255 255 255;
+  --c-surface: 244 244 245;
+  --c-surface-2: 228 228 231;
+  --c-border: 212 212 216;
+  --c-muted: 100 105 115;
+  --c-fg: 55 56 62;
+  --c-strong: 24 24 27;
+}
+
+.dark {
+  color-scheme: dark;
+  --c-canvas: 10 10 11;
+  --c-surface: 20 20 23;
+  --c-surface-2: 29 29 34;
+  --c-border: 42 42 48;
+  --c-muted: 155 155 165;
+  --c-fg: 212 212 216;
+  --c-strong: 228 228 231;
+}
+
+@layer base {
+  body {
+    @apply bg-canvas text-fg;
+  }
+}
+
+/* Visible keyboard focus everywhere for accessibility. */
+*:focus-visible {
+  outline: 2px solid #34d399;
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* Thin, themed scrollbars. */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-thumb {
+  background: rgb(var(--c-border));
+  border-radius: 6px;
+}
+
+/* iOS Safari zooms the page when focusing an input whose font-size is < 16px.
+   Force 16px on form controls at phone widths so focusing the search bar doesn't
+   zoom/shift the layout. */
+@media (max-width: 640px) {
+  /* !important so it beats Tailwind's text-sm (a class out-specifies an element
+     selector) — otherwise iOS still zooms on focus. */
+  input,
+  select,
+  textarea {
+    font-size: 16px !important;
+  }
+}
