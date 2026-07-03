@@ -6,6 +6,7 @@ import { useCallback, useEffect, useState } from "react";
 
 const LINKS = [
   { href: "/", label: "Now" },
+  { href: "/map", label: "Map" },
   { href: "/timing", label: "Timing" },
   { href: "/rare", label: "Rare" },
   { href: "/hotspots", label: "Hotspots" },

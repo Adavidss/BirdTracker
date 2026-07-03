@@ -128,6 +128,17 @@ def test_throttle_spacing() -> None:
     assert sleeps == [1.5]
 
 
+def test_species_recent_observations_path() -> None:
+    rec = Recorder([httpx.Response(200, json=[{"speciesCode": "woothr", "lat": 38.9}])])
+    with make_client(rec) as client:
+        result = client.species_recent_observations("woothr", 38.99, -76.94, 25, 14)
+    assert result == [{"speciesCode": "woothr", "lat": 38.9}]
+    req = rec.requests[0]
+    assert req.url.path == "/v2/data/obs/geo/recent/woothr"
+    assert req.url.params["dist"] == "25"
+    assert req.url.params["back"] == "14"
+
+
 def test_historic_species_dedups_and_sorts() -> None:
     records = [
         {"speciesCode": "norcar"},

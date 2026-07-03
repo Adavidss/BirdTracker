@@ -21,6 +21,9 @@ from .aggregate import aggregate, filter_min_days
 from .config import Config, load_config, require_key
 from .ebird import EBirdClient
 
+# Safety cap on per-species map fetches (one API call each per day).
+MAX_MAP_SPECIES = 250
+
 
 def run(
     cfg: Config,
@@ -37,6 +40,7 @@ def run(
     now_records: list[dict[str, Any]] = []
     notable_records: list[dict[str, Any]] = []
     hotspot_records: list[dict[str, Any]] = []
+    sightings_by_code: dict[str, list[dict[str, Any]]] = {}
 
     if not offline:
         with EBirdClient(require_key(cfg)) as client:
@@ -49,6 +53,19 @@ def run(
             hotspot_records = client.nearby_hotspots(
                 cfg.center_lat, cfg.center_lng, cfg.radius_km, cfg.recent_window_days
             )
+
+            # Per-species report locations for the map. One call per species
+            # currently around (~120/day, throttled) — the recent feed above is
+            # deduped to one record per species, so it can't drive a map filter.
+            map_codes = sorted(
+                {str(r["speciesCode"]) for r in now_records if r.get("speciesCode")}
+            )[:MAX_MAP_SPECIES]
+            print(f"sightings: fetching report locations for {len(map_codes)} species")
+            for code in map_codes:
+                sightings_by_code[code] = client.species_recent_observations(
+                    code, cfg.center_lat, cfg.center_lng, cfg.radius_km,
+                    cfg.recent_window_days,
+                )
 
             fetched_days = 0
             for region in cfg.regions:
@@ -66,9 +83,9 @@ def run(
             for day_codes in days.values():
                 seen.update(day_codes)
             for record in [*now_records, *notable_records]:
-                code = record.get("speciesCode")
-                if code:
-                    seen.add(code)
+                rec_code = record.get("speciesCode")
+                if rec_code:
+                    seen.add(rec_code)
             unknown = sorted(seen - set(slice_))
             if unknown:
                 print(f"taxonomy: fetching {len(unknown)} new code(s)")
@@ -84,12 +101,16 @@ def run(
         counts["now"] = export.count_existing(out, "birds-now.json", "species")
         counts["notable"] = export.count_existing(out, "notable.json", "sightings")
         counts["hotspots"] = export.count_existing(out, "hotspots.json", "hotspots")
+        counts["sightings"] = export.count_existing_sightings(out)
     else:
         counts["now"] = export.export_birds_now(
             now_records, days, cfg.recent_window_days, out, today
         )
         counts["notable"] = export.export_notable(notable_records, cfg.recent_window_days, out)
         counts["hotspots"] = export.export_hotspots(hotspot_records, out)
+        counts["sightings"] = export.export_sightings(
+            sightings_by_code, cfg.recent_window_days, out
+        )
 
     counts["seasonality"] = export.export_seasonality(seasonality, slice_, cfg.regions, out)
     export.export_species(slice_, out)
@@ -98,8 +119,8 @@ def run(
     mode = "offline" if offline else "online"
     print(
         f"update ({mode}): now={counts['now']} notable={counts['notable']} "
-        f"hotspots={counts['hotspots']} seasonality={counts['seasonality']} "
-        f"history_days={len(days)} -> {out}"
+        f"hotspots={counts['hotspots']} sightings={counts['sightings']} "
+        f"seasonality={counts['seasonality']} history_days={len(days)} -> {out}"
     )
     return counts
 

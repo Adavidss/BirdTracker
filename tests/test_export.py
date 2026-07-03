@@ -71,6 +71,44 @@ def test_hotspots_active_first(tmp_path: Path, hotspot_records: list[dict[str, A
     assert payload["hotspots"][1]["latest_obs"] == ""
 
 
+def test_sightings_schema_cap_and_coords(tmp_path: Path) -> None:
+    per_species = {
+        "woothr": [
+            {
+                "speciesCode": "woothr", "lat": 38.96, "lng": -77.04,
+                "locId": "L1", "locName": "Rock Creek Park",
+                "obsDt": "2026-06-30 07:10", "howMany": 2, "subId": "S1",
+            },
+            {
+                "speciesCode": "woothr", "lat": 38.98, "lng": -76.93,
+                "locId": "L2", "locName": "Lake Artemesia",
+                "obsDt": "2026-07-01 09:15", "subId": "S2",  # no howMany
+            },
+            {"speciesCode": "woothr", "locId": "L3", "obsDt": "2026-07-01 10:00"},  # no coords
+        ],
+        "nocoords": [{"speciesCode": "nocoords", "obsDt": "2026-07-01 08:00"}],
+        "manypts": [
+            {"speciesCode": "manypts", "lat": 38.9, "lng": -76.9,
+             "obsDt": f"2026-06-{10 + i // 10:02d} {i % 10:02d}:00", "subId": f"S{i}"}
+            for i in range(80)
+        ],
+    }
+    total = export.export_sightings(per_species, 14, tmp_path)
+    payload = read(tmp_path, "sightings.json")
+    assert payload["window_days"] == 14
+    woothr = payload["species"]["woothr"]
+    assert len(woothr) == 2  # coordinate-less record dropped
+    assert woothr[0]["obs_dt"] == "2026-07-01 09:15"  # newest first
+    assert woothr[0]["how_many"] is None
+    assert set(woothr[0]) == {
+        "lat", "lng", "loc_id", "loc_name", "obs_dt", "how_many", "checklist_id",
+    }
+    assert "nocoords" not in payload["species"]  # nothing located -> omitted
+    assert len(payload["species"]["manypts"]) == export.MAX_SIGHTINGS_PER_SPECIES
+    assert total == 2 + export.MAX_SIGHTINGS_PER_SPECIES
+    assert export.count_existing_sightings(tmp_path) == total
+
+
 SLICE = {
     "carwre": {
         "com_name": "Carolina Wren", "sci_name": "Thryothorus ludovicianus",

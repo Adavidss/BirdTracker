@@ -106,6 +106,17 @@ class EBirdClient:
         )
         return result
 
+    def species_recent_observations(
+        self, code: str, lat: float, lng: float, dist_km: int, back_days: int
+    ) -> list[dict[str, Any]]:
+        """Every recent report of ONE species within the radius (not deduped) — the
+        per-species map data. One call per current species keeps daily usage modest."""
+        result: list[dict[str, Any]] = self._get(
+            f"/data/obs/geo/recent/{code}",
+            {"lat": lat, "lng": lng, "dist": dist_km, "back": back_days},
+        )
+        return result
+
     def nearby_hotspots(
         self, lat: float, lng: float, dist_km: int, back_days: int
     ) -> list[dict[str, Any]]:

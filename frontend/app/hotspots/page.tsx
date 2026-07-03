@@ -6,7 +6,7 @@
 import { useEffect, useState } from "react";
 
 import { getHotspots } from "@/lib/api";
-import { relativeObs } from "@/lib/format";
+import { appleMapsUrl, relativeObs } from "@/lib/format";
 import type { HotspotList } from "@/lib/types";
 
 export default function HotspotsPage() {
@@ -55,12 +55,12 @@ export default function HotspotsPage() {
               </a>
               {h.lat !== null && h.lng !== null && (
                 <a
-                  href={`https://maps.google.com/?q=${h.lat},${h.lng}`}
+                  href={appleMapsUrl(h.lat, h.lng)}
                   target="_blank"
                   rel="noreferrer"
                   className="shrink-0 text-xs text-leaf hover:underline"
                 >
-                  Map ↗
+                  Directions ↗
                 </a>
               )}
             </li>

@@ -59,6 +59,11 @@ export function formatUpdated(iso: string): string {
   return `${Math.round(hours / 24)}d ago`;
 }
 
+/** Apple Maps directions to a coordinate (works on iOS/macOS and the web). */
+export function appleMapsUrl(lat: number, lng: number): string {
+  return `https://maps.apple.com/?daddr=${lat},${lng}`;
+}
+
 /** Best-effort All About Birds guide URL from a common name (convenience link). */
 export function allAboutBirdsUrl(comName: string): string {
   const slug = comName.replace(/['’.]/g, "").trim().replace(/\s+/g, "_");

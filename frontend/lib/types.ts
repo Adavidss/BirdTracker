@@ -75,6 +75,24 @@ export interface HotspotList {
   hotspots: Hotspot[];
 }
 
+export interface SightingPoint {
+  lat: number;
+  lng: number;
+  loc_id: string;
+  loc_name: string;
+  /** eBird obsDt, verbatim zone-less local time — never Date-parse. */
+  obs_dt: string;
+  how_many: number | null;
+  checklist_id: string;
+}
+
+export interface SightingsFile {
+  generated_at: string;
+  window_days: number;
+  /** Every located recent report, keyed by species code, newest first. */
+  species: Record<string, SightingPoint[]>;
+}
+
 export interface SpeciesInfo {
   com_name: string;
   sci_name: string;

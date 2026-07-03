@@ -1,10 +1,11 @@
 # 🪶 BirdTracker
 
 **What birds are around College Park / DC — and when.** A birdwatching planner
-built on eBird data: see what's being reported nearby right now, what's rare,
-where the active hotspots are, and (the star feature) *when* each species is
-actually around, week by week, so you can time outings around arrivals,
-departures, and migration windows.
+built on eBird data: see what's being reported nearby right now, browse a map
+of recent sightings (clickable spots with Apple Maps directions, or a density
+heat view, filterable by species), what's rare, where the active hotspots are,
+and (the star feature) *when* each species is actually around, week by week,
+so you can time outings around arrivals, departures, and migration windows.
 
 Fully static site on GitHub Pages, in the same architecture as ConcertFinder:
 a Python pipeline runs in GitHub Actions on a daily cron, calls the eBird API

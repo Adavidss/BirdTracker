@@ -7,7 +7,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 
 import { getNotable } from "@/lib/api";
-import { formatObs } from "@/lib/format";
+import { appleMapsUrl, formatObs } from "@/lib/format";
 import type { NotableList } from "@/lib/types";
 
 export default function RarePage() {
@@ -70,12 +70,12 @@ export default function RarePage() {
                 )}
                 {s.lat !== null && s.lng !== null && (
                   <a
-                    href={`https://maps.google.com/?q=${s.lat},${s.lng}`}
+                    href={appleMapsUrl(s.lat, s.lng)}
                     target="_blank"
                     rel="noreferrer"
                     className="text-leaf hover:underline"
                   >
-                    Map ↗
+                    Directions ↗
                   </a>
                 )}
                 <Link href={`/species/?code=${s.code}`} className="text-muted hover:text-fg">

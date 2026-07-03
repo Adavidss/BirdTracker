@@ -137,6 +137,57 @@ def export_notable(records: list[dict[str, Any]], window_days: int, out_dir: Pat
     return len(sightings)
 
 
+# Newest-first cap per species keeps sightings.json bounded (~120 species x 60).
+MAX_SIGHTINGS_PER_SPECIES = 60
+
+
+def export_sightings(
+    per_species: Mapping[str, list[dict[str, Any]]],
+    window_days: int,
+    out_dir: Path,
+) -> int:
+    """Map data: every located recent report, keyed by species code."""
+    species: dict[str, list[dict[str, Any]]] = {}
+    total = 0
+    for code, records in sorted(per_species.items()):
+        points = [
+            {
+                "lat": r["lat"],
+                "lng": r["lng"],
+                "loc_id": r.get("locId", ""),
+                "loc_name": r.get("locName", ""),
+                "obs_dt": r.get("obsDt", ""),
+                "how_many": r.get("howMany"),
+                "checklist_id": r.get("subId", ""),
+            }
+            for r in records
+            if r.get("lat") is not None and r.get("lng") is not None
+        ]
+        if not points:
+            continue
+        points.sort(key=lambda p: str(p["obs_dt"]), reverse=True)
+        points = points[:MAX_SIGHTINGS_PER_SPECIES]
+        species[code] = points
+        total += len(points)
+    payload = {"generated_at": _now_iso(), "window_days": window_days, "species": species}
+    _write(out_dir, "sightings.json", payload)
+    return total
+
+
+def count_existing_sightings(out_dir: Path) -> int:
+    path = out_dir / "sightings.json"
+    if not path.exists():
+        return 0
+    try:
+        payload = json.loads(path.read_text())
+    except json.JSONDecodeError:
+        return 0
+    species = payload.get("species")
+    if not isinstance(species, dict):
+        return 0
+    return sum(len(v) for v in species.values() if isinstance(v, list))
+
+
 def export_hotspots(records: list[dict[str, Any]], out_dir: Path) -> int:
     hotspots = [
         {

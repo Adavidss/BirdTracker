@@ -32,9 +32,10 @@ pick up the history until the next deploy (manual or the nightly cron).
 ## 3. Steady state (nothing to do)
 
 - **Daily at 10:00 UTC** (~5–6 am ET) the deploy workflow: fetches the three
-  radius snapshots, fills any missing history days (self-heals up to
-  `catchup_days` = 8 missed runs), commits new day-files, rebuilds, deploys.
-  Steady-state usage: ~5–6 eBird API calls per day.
+  radius snapshots plus per-species report locations for the map (one call per
+  species currently around, ~120–130), fills any missing history days
+  (self-heals up to `catchup_days` = 8 missed runs), commits new day-files,
+  rebuilds, deploys. Steady-state usage: ~130 throttled eBird calls per day.
 - Deploy and backfill share the `data-and-pages` concurrency group with
   `cancel-in-progress: false`, so two writers of `data/` never race and a
   half-done backfill is never killed.

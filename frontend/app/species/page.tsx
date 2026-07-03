@@ -156,6 +156,9 @@ function SpeciesDetail() {
       )}
 
       <p className="mt-4 flex flex-wrap gap-3 text-xs">
+        <Link href={`/map/?code=${code}`} className="text-leaf hover:underline">
+          View on map →
+        </Link>
         <a
           href={`https://ebird.org/species/${code}`}
           target="_blank"

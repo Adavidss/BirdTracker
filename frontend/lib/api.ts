@@ -9,6 +9,7 @@ import type {
   Meta,
   NotableList,
   Seasonality,
+  SightingsFile,
   SpeciesIndex,
 } from "./types";
 
@@ -63,6 +64,14 @@ export function getNotable(): Promise<NotableList> {
 
 export function getHotspots(): Promise<HotspotList> {
   return loadJSON<HotspotList>("hotspots.json", { generated_at: "", hotspots: [] });
+}
+
+export function getSightings(): Promise<SightingsFile> {
+  return loadJSON<SightingsFile>("sightings.json", {
+    generated_at: "",
+    window_days: 14,
+    species: {},
+  });
 }
 
 export function getSpeciesIndex(): Promise<SpeciesIndex> {
