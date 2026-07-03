@@ -3,9 +3,10 @@
 **What birds are around College Park / DC — and when.** A birdwatching planner
 built on eBird data: see what's being reported nearby right now, browse a map
 of recent sightings (clickable spots with Apple Maps directions, or a density
-heat view, filterable by species), what's rare, where the active hotspots are,
-and (the star feature) *when* each species is actually around, week by week,
-so you can time outings around arrivals, departures, and migration windows.
+heat view, filterable by species — for the home area or live for any US place,
+e.g. Chapel Hill NC), what's rare, where the active hotspots are, and (the star
+feature) *when* each species is actually around, week by week, so you can time
+outings around arrivals, departures, and migration windows.
 
 Fully static site on GitHub Pages, in the same architecture as ConcertFinder:
 a Python pipeline runs in GitHub Actions on a daily cron, calls the eBird API
@@ -67,6 +68,7 @@ tests/               offline unit tests (fixtures + httpx.MockTransport)
 data/history/        committed per-day region species lists (CI appends daily)
 data/reference/      taxonomy slice — names for species we've seen (never the 4MB full file)
 frontend/            Next.js 15 static export under /BirdTracker; reads public/data/*.json
+worker/              Cloudflare Worker: live eBird proxy for the map's anywhere-mode
 .github/workflows/   ci (lint+test), deploy (daily cron), backfill (manual, resumable)
 ```
 

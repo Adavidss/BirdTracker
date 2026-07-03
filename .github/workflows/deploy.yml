@@ -69,6 +69,10 @@ jobs:
       # The /BirdTracker base path is hardcoded in next.config.mjs.
       - name: Build static site (static export -> frontend/out)
         working-directory: frontend
+        env:
+          # Repo Variable (not a secret — it's a public Worker URL): enables the
+          # map's live "anywhere" mode. Empty -> home area only.
+          NEXT_PUBLIC_BIRDS_API: ${{ vars.NEXT_PUBLIC_BIRDS_API }}
         run: npm run build
       # Safety net: stop GitHub Pages from running Jekyll, which would strip the
       # _next/ folder (leading underscore) and 404 every JS/CSS asset.

@@ -1,0 +1,16 @@
+name = "birdtracker-birds"
+main = "index.js"
+compatibility_date = "2024-11-01"
+
+[vars]
+# Pause live lookups after this many requests/day (resets 00:00 UTC). Needs the
+# COUNTER KV binding below; without it this is a no-op.
+DAILY_CAP = "900"
+
+# Daily-counter storage (account-level namespace "BIRDTRACKER_COUNTER").
+[[kv_namespaces]]
+binding = "COUNTER"
+id = "52888a08664944b099b7c4e3a820fe39"
+
+# Secret (set out-of-band, never in git):
+#   npx wrangler secret put EBIRD_API_KEY

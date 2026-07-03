@@ -19,6 +19,11 @@ const nextConfig = {
   images: { unoptimized: true },
   env: {
     NEXT_PUBLIC_BASE_PATH: basePath,
+    // Base URL of the live eBird proxy Worker (see worker/) — a public URL, not
+    // a secret. Override with the env var; set it to "" to hide the map's
+    // "anywhere" mode entirely.
+    NEXT_PUBLIC_BIRDS_API:
+      process.env.NEXT_PUBLIC_BIRDS_API ?? "https://birdtracker-birds.kidsdc.workers.dev",
   },
 };
 

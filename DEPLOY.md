@@ -42,6 +42,22 @@ pick up the history until the next deploy (manual or the nightly cron).
 - GitHub disables cron workflows after 60 days without repo activity — the
   daily bot commit itself counts as activity, so the system self-sustains.
 
+## Live anywhere-mode (Cloudflare Worker)
+
+The map's "anywhere in the US" lookups go through a tiny Worker that holds the
+eBird key server-side (the browser never sees it):
+
+```bash
+cd worker
+npx wrangler deploy                      # -> https://birdtracker-birds.<acct>.workers.dev
+npx wrangler secret put EBIRD_API_KEY    # paste the same key
+```
+
+The frontend finds it via `NEXT_PUBLIC_BIRDS_API` (defaults to the deployed
+Worker URL in next.config.mjs; the repo Variable overrides it in CI — set it to
+an empty string to hide the feature). Lookups are edge-cached 10 min and
+self-capped at 900/day via the BIRDTRACKER_COUNTER KV namespace.
+
 ## Changing the area
 
 Edit `config.json` (center, radius_km ≤ 50, regions). Region codes: state like

@@ -57,19 +57,29 @@ export function BirdMap({
   namesByCode,
   filterCode,
   view,
+  fitKey = "home",
 }: {
   sightings: SightingsFile;
   namesByCode: Record<string, string>;
   filterCode: string | null;
   view: "spots" | "intensity";
+  /** Changing this (e.g. a new area) drops the remembered pan/zoom and re-fits. */
+  fitKey?: string;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
-  // Preserve pan/zoom across rebuilds (view toggle, filter changes).
+  // Preserve pan/zoom across rebuilds (view toggle, filter changes)…
   const viewRef = useRef<{ center: [number, number]; zoom: number } | null>(null);
+  // …but re-fit when the map moves to a different area.
+  const fitKeyRef = useRef(fitKey);
+  if (fitKeyRef.current !== fitKey) {
+    fitKeyRef.current = fitKey;
+    viewRef.current = null;
+  }
 
   useEffect(() => {
     let map: import("leaflet").Map | null = null;
     let cancelled = false;
+    const effectFitKey = fitKey;
 
     (async () => {
       const L = (await import("leaflet")).default;
@@ -196,14 +206,18 @@ export function BirdMap({
     return () => {
       cancelled = true;
       if (map) {
-        viewRef.current = {
-          center: [map.getCenter().lat, map.getCenter().lng],
-          zoom: map.getZoom(),
-        };
+        // Cleanup runs AFTER the render that may have nulled viewRef for a new
+        // area — only preserve the view if we're still on the same area.
+        if (fitKeyRef.current === effectFitKey) {
+          viewRef.current = {
+            center: [map.getCenter().lat, map.getCenter().lng],
+            zoom: map.getZoom(),
+          };
+        }
         map.remove();
       }
     };
-  }, [sightings, namesByCode, filterCode, view]);
+  }, [sightings, namesByCode, filterCode, view, fitKey]);
 
   return (
     <div
