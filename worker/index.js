@@ -9,10 +9,12 @@
 //   /notable?lat&lng&dist&back       rare/notable reports (not deduped)
 //   /hotspots?lat&lng&dist&back      nearby hotspots
 //   /species-obs?code&lat&lng&dist&back   every recent report of one species
-//   /seasonality?region=US-NC        sampled 48-week presence profile (see below)
+//   /seasonality?lat&lng             sampled 48-week presence profile (see below)
+//   /calls?sp=Genus+species          xeno-canto recordings for one species
 //
-// Deploy:  npx wrangler deploy        (from worker/)
-// Secret:  npx wrangler secret put EBIRD_API_KEY
+// Deploy:   npx wrangler deploy        (from worker/)
+// Secrets:  npx wrangler secret put EBIRD_API_KEY
+//           npx wrangler secret put XENOCANTO_API_KEY
 
 const EBIRD = "https://api.ebird.org/v2";
 
@@ -260,6 +262,58 @@ async function seasonality(url, env) {
   });
 }
 
+// --- /calls — xeno-canto recordings for one species ---------------------------
+//
+// xeno-canto's API v3 needs a key and sends no CORS headers, so the browser
+// can't call it directly — this proxies the search and slims the response.
+// The audio itself streams straight from xeno-canto (media elements don't
+// need CORS): https://xeno-canto.org/{id}/download
+const QUALITY_RANK = { A: 0, B: 1, C: 2, D: 3, E: 4 };
+
+async function calls(url, env) {
+  if (!env.XENOCANTO_API_KEY) return json({ error: "Server missing XENOCANTO_API_KEY" }, 500);
+  const sp = (url.searchParams.get("sp") || "").trim();
+  // Scientific names only: "Setophaga ruticilla" (letters, spaces, .'-).
+  if (!/^[A-Za-z][A-Za-z .'-]{2,60}$/.test(sp)) {
+    return json({ error: "valid scientific name required (sp=Genus species)" }, 400);
+  }
+
+  let data;
+  try {
+    const r = await fetch(
+      `https://xeno-canto.org/api/3/recordings?query=${encodeURIComponent(`sp:"${sp}"`)}&key=${env.XENOCANTO_API_KEY}&per_page=50`,
+      { headers: { Accept: "application/json", "User-Agent": "BirdTracker (personal, kidsdc.org/BirdTracker)" } },
+    );
+    if (!r.ok) return json({ error: `xeno-canto error ${r.status}` }, 502);
+    data = await r.json();
+  } catch {
+    return json({ error: "xeno-canto fetch failed" }, 502);
+  }
+
+  const recordings = (Array.isArray(data?.recordings) ? data.recordings : [])
+    .filter((r) => r.file && r.id)
+    .sort((a, b) => (QUALITY_RANK[a.q] ?? 9) - (QUALITY_RANK[b.q] ?? 9))
+    .slice(0, 12)
+    .map((r) => ({
+      id: r.id,
+      type: r.type || "",
+      q: r.q || "",
+      length: r.length || "",
+      rec: r.rec || "",
+      cnt: r.cnt || "",
+      loc: r.loc || "",
+      date: r.date || "",
+      file: r.file,
+    }));
+
+  // Recordings change rarely — let the edge hold them for a day.
+  return json(
+    { species: sp, total: Number(data?.numRecordings ?? recordings.length), recordings },
+    200,
+    { "Cache-Control": "public, max-age=86400" },
+  );
+}
+
 export default {
   async fetch(request, env) {
     if (request.method === "OPTIONS") return new Response(null, { headers: CORS });
@@ -269,6 +323,10 @@ export default {
     const url = new URL(request.url);
 
     if (url.pathname.endsWith("/seasonality")) return seasonality(url, env);
+    if (url.pathname.endsWith("/calls")) {
+      const capped = await chargeCap(env, 1);
+      return capped ?? calls(url, env);
+    }
 
     const g = geoParams(url);
 

@@ -12,5 +12,6 @@ DAILY_CAP = "900"
 binding = "COUNTER"
 id = "52888a08664944b099b7c4e3a820fe39"
 
-# Secret (set out-of-band, never in git):
+# Secrets (set out-of-band, never in git):
 #   npx wrangler secret put EBIRD_API_KEY
+#   npx wrangler secret put XENOCANTO_API_KEY   (free key: xeno-canto.org account page)
