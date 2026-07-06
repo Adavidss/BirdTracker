@@ -1,13 +1,17 @@
 "use client";
 
 // TIMING — the star feature: who's arriving, who's leaving, and what to expect
-// in any month, from the accumulated region history.
+// in any month. Home area: the accumulated daily region history (rich). Any
+// other area: a 24-day sampled year for its eBird region via the Worker —
+// coarser, but honest seasonal timing anywhere.
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 
 import { SeasonalityChart } from "@/components/SeasonalityChart";
 import { getSeasonality, getSpeciesIndex } from "@/lib/api";
+import { useArea } from "@/lib/area";
+import { fetchLiveSeasonality, indexFromNames, type LiveSeasonality } from "@/lib/live";
 import {
   arrivals,
   currentWeek,
@@ -19,7 +23,7 @@ import type { SeasonSpecies, Seasonality, SpeciesIndex } from "@/lib/types";
 
 const RAIL_LIMIT = 12;
 
-interface Data {
+interface HomeData {
   seasonality: Seasonality;
   index: SpeciesIndex;
 }
@@ -53,49 +57,104 @@ function SpeciesRow({
 }
 
 export default function TimingPage() {
-  const [data, setData] = useState<Data | null>(null);
+  const { area, ready } = useArea();
+  const [home, setHome] = useState<HomeData | null>(null);
+  const [liveData, setLiveData] = useState<LiveSeasonality | null>(null);
+  const [liveBusy, setLiveBusy] = useState(false);
+  const [liveError, setLiveError] = useState<string | null>(null);
   const [month, setMonth] = useState(() => new Date().getMonth());
   const [query, setQuery] = useState("");
 
   useEffect(() => {
     let alive = true;
     Promise.all([getSeasonality(), getSpeciesIndex()]).then(([seasonality, index]) => {
-      if (alive) setData({ seasonality, index });
+      if (alive) setHome({ seasonality, index });
     });
     return () => {
       alive = false;
     };
   }, []);
 
+  // Live area: sampled seasonality for its nearest county (cached per session +
+  // KV-cached in the Worker, so only the first look at a region is slow).
+  useEffect(() => {
+    setLiveData(null);
+    setLiveError(null);
+    if (!ready || !area) return;
+    setLiveBusy(true);
+    let alive = true;
+    fetchLiveSeasonality(area)
+      .then((s) => {
+        if (alive) setLiveData(s);
+      })
+      .catch((e: Error) => {
+        if (alive) setLiveError(e.message);
+      })
+      .finally(() => {
+        if (alive) setLiveBusy(false);
+      });
+    return () => {
+      alive = false;
+    };
+  }, [ready, area]);
+
+  const seasonality = area ? liveData?.seasonality : home?.seasonality;
+  const index = useMemo(
+    () => (area ? (liveData ? indexFromNames(liveData.names) : null) : (home?.index ?? null)),
+    [area, liveData, home],
+  );
+
   const nowWeek = currentWeek();
   const thisMonth = new Date().getMonth();
 
   const matches = useMemo(() => {
-    if (!data) return () => true;
+    if (!index) return () => true;
     const q = query.trim().toLowerCase();
     if (!q) return () => true;
     return (sp: SeasonSpecies) => {
-      const info = data.index.species[sp.code];
+      const info = index.species[sp.code];
       return (
         sp.code.includes(q) ||
         (info?.com_name.toLowerCase().includes(q) ?? false) ||
         (info?.sci_name.toLowerCase().includes(q) ?? false)
       );
     };
-  }, [data, query]);
+  }, [index, query]);
 
-  if (!data) {
+  const heading = (
+    <h1 className="text-2xl font-semibold text-strong">
+      Timing{area ? ` · ${area.label}` : ""}
+    </h1>
+  );
+
+  if (area && liveError) {
     return (
       <div>
-        <h1 className="text-2xl font-semibold text-strong">Timing</h1>
-        <p className="mt-4 text-sm text-muted">Loading…</p>
+        {heading}
+        <div className="mt-4 rounded-xl border border-border bg-surface p-6 text-sm">
+          <p className="font-medium text-fg">Seasonal lookup failed.</p>
+          <p className="mt-1 text-muted">{liveError}</p>
+        </div>
       </div>
     );
   }
 
-  const { seasonality, index } = data;
+  if (!seasonality || !index) {
+    return (
+      <div>
+        {heading}
+        <p className="mt-4 text-sm text-muted">
+          {area && (liveBusy || !ready)
+            ? `Sampling a year of eBird history around ${area.label} — the first look at a region takes a few seconds…`
+            : "Loading…"}
+        </p>
+      </div>
+    );
+  }
+
   const covered = seasonality.weeks_covered;
   const species = seasonality.species.filter(matches);
+  const daysWord = area ? "sampled days" : "days";
 
   const arriving = arrivals(species, covered, nowWeek).slice(0, RAIL_LIMIT);
   const departing = departures(species, covered, nowWeek).slice(0, RAIL_LIMIT);
@@ -103,22 +162,47 @@ export default function TimingPage() {
 
   return (
     <div>
-      <h1 className="text-2xl font-semibold text-strong">Timing</h1>
+      {heading}
       <p className="mb-5 mt-1 text-sm text-muted">
-        When each species is actually around, from daily region records
-        {seasonality.first_date
-          ? ` (${seasonality.first_date} → ${seasonality.last_date})`
-          : ""}
-        .
+        {area ? (
+          <>
+            When each species is around {area.label} — presence sampled on{" "}
+            {liveData?.sampleCount ?? 24} days across the past year
+            {seasonality.first_date
+              ? ` (${seasonality.first_date} → ${seasonality.last_date})`
+              : ""}{" "}
+            for {liveData?.regionName ?? "the nearest county"}, live from eBird.
+            {liveData && liveData.failedSamples > 0
+              ? ` ${liveData.failedSamples} samples unavailable — those weeks are dimmed.`
+              : ""}
+          </>
+        ) : (
+          <>
+            When each species is actually around, from daily region records
+            {seasonality.first_date
+              ? ` (${seasonality.first_date} → ${seasonality.last_date})`
+              : ""}
+            .
+          </>
+        )}
       </p>
 
       {seasonality.species.length === 0 ? (
         <div className="rounded-xl border border-border bg-surface p-6 text-sm text-muted">
-          <p className="font-medium text-fg">No seasonal history yet.</p>
-          <p className="mt-1">
-            Run the backfill to load 1–2 years of daily records (see the README) — this page gets
-            good exactly then.
-          </p>
+          {area ? (
+            <p>
+              eBird has no sampled records for {liveData?.regionName ?? "this region"} — try a
+              different place.
+            </p>
+          ) : (
+            <>
+              <p className="font-medium text-fg">No seasonal history yet.</p>
+              <p className="mt-1">
+                Run the backfill to load 1–2 years of daily records (see the README) — this page
+                gets good exactly then.
+              </p>
+            </>
+          )}
         </div>
       ) : (
         <>
@@ -197,7 +281,7 @@ export default function TimingPage() {
             </div>
             {inMonth.length === 0 ? (
               <p className="text-sm text-muted">
-                Nothing crosses the 20%-of-days bar for {monthName(month)} yet.
+                Nothing crosses the 20%-of-{daysWord} bar for {monthName(month)} yet.
               </p>
             ) : (
               <ul className="divide-y divide-border">
@@ -208,7 +292,7 @@ export default function TimingPage() {
                     covered={covered}
                     index={index}
                     nowWeek={month === thisMonth ? nowWeek : undefined}
-                    detail={`${Math.round(freq * 100)}% of days`}
+                    detail={`${Math.round(freq * 100)}% of ${daysWord}`}
                   />
                 ))}
               </ul>

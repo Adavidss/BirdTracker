@@ -1,12 +1,19 @@
 # 🪶 BirdTracker
 
-**What birds are around College Park / DC — and when.** A birdwatching planner
-built on eBird data: see what's being reported nearby right now, browse a map
-of recent sightings (clickable spots with Apple Maps directions, or a density
-heat view, filterable by species — for the home area or live for any US place,
-e.g. Chapel Hill NC), what's rare, where the active hotspots are, and (the star
-feature) *when* each species is actually around, week by week, so you can time
-outings around arrivals, departures, and migration windows.
+**What birds are around — anywhere — and when.** A birdwatching planner built
+on eBird data, two sections:
+
+- **Explore** — one map with toggleable layers: recent sightings (clickable
+  spots with Apple Maps directions, or a density heat view, filterable by
+  species), rare/notable reports, and active hotspots — each with a matching
+  list panel below the map.
+- **Timing** (the star feature) — *when* each species is actually around, week
+  by week, so you can time outings around arrivals, departures, and migration
+  windows.
+
+Both work for the home area (College Park / DC, baked daily) **or any place on
+Earth** via the 📍 picker in the nav — live from eBird, including seasonal
+timing sampled for the nearest county (e.g. Chapel Hill NC → Orange County).
 
 Fully static site on GitHub Pages, in the same architecture as ConcertFinder:
 a Python pipeline runs in GitHub Actions on a daily cron, calls the eBird API
@@ -14,17 +21,26 @@ with a CI-secret key, writes JSON that the Next.js frontend reads, and commits
 the accumulating seasonal history back to the repo. No servers, no database —
 the browser only ever fetches static JSON.
 
-## The two data geometries
+## The data geometries
 
-| Pages | Source | Geometry |
+| What | Source | Geometry |
 |---|---|---|
-| **Now / Rare / Hotspots** | eBird "recent nearby" endpoints, refetched daily | circle: 25 km around 38.99, -76.94 |
-| **Timing / species charts** | daily species lists per region, accumulated in `data/history/` | regions: `US-DC` + `US-MD-033` (Prince George's) |
+| **Explore layers** (home) | eBird "recent nearby" endpoints, refetched daily | circle: 25 km around 38.99, -76.94 |
+| **Timing / species charts** (home) | daily species lists per region, accumulated in `data/history/` | regions: `US-DC` + `US-MD-033` (Prince George's) |
+| **Anywhere (live)** | Cloudflare Worker proxy (`worker/`), eBird key server-side | circle: 25 km around the picked point; Timing samples the nearest county |
 
 A radius circle is not the union of the region polygons, so the UI labels them
-differently ("nearby" vs. the region list in the footer). Both are set in
-[config.json](config.json) — changing the area is a one-file edit (plus,
+differently ("nearby" vs. the region list in the footer). The home ones are set
+in [config.json](config.json) — changing the area is a one-file edit (plus,
 ideally, wiping `data/history/` so old-region history doesn't mix in).
+
+Live Timing can't replay a year of daily history per visitor, so the Worker's
+`/seasonality` endpoint samples **2 days per month over the past year** (24
+historic calls) for the county of the hotspot nearest the picked point, then
+KV-caches the aggregate per region for ~30 days. County-sized regions answer in
+~1–2 s each; whole busy states time out inside eBird (US-NC: 60 s+ → HTTP 500),
+which is why resolution is county-first. Coarser than home's full daily
+coverage — the UI says "sampled" wherever it applies.
 
 ## How seasonality works
 
@@ -68,7 +84,8 @@ tests/               offline unit tests (fixtures + httpx.MockTransport)
 data/history/        committed per-day region species lists (CI appends daily)
 data/reference/      taxonomy slice — names for species we've seen (never the 4MB full file)
 frontend/            Next.js 15 static export under /BirdTracker; reads public/data/*.json
-worker/              Cloudflare Worker: live eBird proxy for the map's anywhere-mode
+worker/              Cloudflare Worker: live eBird proxy for anywhere-mode
+                     (/obs /notable /hotspots /species-obs + sampled /seasonality)
 .github/workflows/   ci (lint+test), deploy (daily cron), backfill (manual, resumable)
 ```
 

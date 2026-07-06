@@ -44,7 +44,8 @@ pick up the history until the next deploy (manual or the nightly cron).
 
 ## Live anywhere-mode (Cloudflare Worker)
 
-The map's "anywhere in the US" lookups go through a tiny Worker that holds the
+The 📍 picker's "anywhere" lookups — Explore's sightings/rare/hotspot layers
+and Timing's sampled seasonality — go through a tiny Worker that holds the
 eBird key server-side (the browser never sees it):
 
 ```bash
@@ -57,6 +58,11 @@ The frontend finds it via `NEXT_PUBLIC_BIRDS_API` (defaults to the deployed
 Worker URL in next.config.mjs; the repo Variable overrides it in CI — set it to
 an empty string to hide the feature). Lookups are edge-cached 10 min and
 self-capped at 900/day via the BIRDTRACKER_COUNTER KV namespace.
+
+`/seasonality?lat&lng` is the expensive one: on a KV cache miss it resolves the
+nearest county (2 calls) and samples 24 historic days (≈27 eBird calls, ~4 s),
+then serves that region from KV for ~30 days (~0.1 s). Cost per *new* region
+per month ≈ 27 calls against the 900/day cap.
 
 ## Changing the area
 

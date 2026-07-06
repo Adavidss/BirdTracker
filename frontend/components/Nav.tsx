@@ -4,12 +4,11 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 
+import { AreaPicker } from "@/components/AreaPicker";
+
 const LINKS = [
-  { href: "/", label: "Now" },
-  { href: "/map", label: "Map" },
+  { href: "/", label: "Explore" },
   { href: "/timing", label: "Timing" },
-  { href: "/rare", label: "Rare" },
-  { href: "/hotspots", label: "Hotspots" },
 ];
 
 function ThemeToggle() {
@@ -36,7 +35,7 @@ function ThemeToggle() {
     <button
       onClick={toggle}
       aria-label="Toggle light/dark theme"
-      className="ml-auto rounded-lg border border-border bg-surface px-2.5 py-1.5 text-sm hover:bg-surface-2"
+      className="shrink-0 rounded-lg border border-border bg-surface px-2.5 py-1.5 text-sm hover:bg-surface-2"
     >
       {mounted ? (dark ? "☀️" : "🌙") : "•"}
     </button>
@@ -71,6 +70,7 @@ export function Nav() {
             </Link>
           );
         })}
+        <AreaPicker />
         <ThemeToggle />
       </nav>
     </header>

@@ -18,6 +18,10 @@ interface Props {
 }
 
 export function SeasonalityChart({ sp, covered, nowWeek, mini = false }: Props) {
+  // "Thin coverage" is relative to the chart's own best week: the sampled live
+  // profiles cover every week exactly once, which shouldn't dim everything.
+  const lowBar = Math.min(LOW_CONFIDENCE_DAYS, Math.max(0, ...covered));
+
   if (mini) {
     return (
       <svg
@@ -77,7 +81,7 @@ export function SeasonalityChart({ sp, covered, nowWeek, mini = false }: Props) 
                 height={h}
                 rx={1}
                 fill="currentColor"
-                fillOpacity={c < LOW_CONFIDENCE_DAYS ? 0.35 : 0.9}
+                fillOpacity={c < lowBar ? 0.35 : 0.9}
               />
             )}
           </g>

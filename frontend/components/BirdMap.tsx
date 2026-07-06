@@ -1,18 +1,19 @@
 "use client";
 
-// Leaflet map of recent sighting reports with two views:
-//  - "spots":     one clickable marker per location (popup: species/reports +
-//                 Apple Maps directions)
-//  - "intensity": a heat layer weighted by report density
-// A species filter narrows both views to that bird's reports.
+// Leaflet map of recent bird activity, drawn as independent layers:
+//  - sightings: clickable green spots ("spots") or a heat layer ("intensity"),
+//    optionally filtered to one species
+//  - rare:      amber diamonds — notable/rare reports (aggregated per location)
+//  - hotspots:  sky-blue rings — eBird hotspots, sized by all-time species count
+// A layer is drawn when its data prop is non-null; the parent owns toggling.
 // Leaflet touches `window`, so it's imported dynamically inside the effect
 // (same pattern as ConcertFinder's VenueMap).
 
 import "leaflet/dist/leaflet.css";
 import { useEffect, useRef } from "react";
 
-import { appleMapsUrl, formatObs } from "@/lib/format";
-import type { SightingsFile } from "@/lib/types";
+import { appleMapsUrl, formatObs, relativeObs } from "@/lib/format";
+import type { Hotspot, NotableSighting, SightingsFile } from "@/lib/types";
 
 // Popup links are raw HTML (not next/link), so they don't get the basePath
 // automatically — prefix them by hand. Trailing slash matches trailingSlash:true.
@@ -22,6 +23,8 @@ const BASE = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
 const FALLBACK = { lat: 38.99, lng: -76.94 };
 
 const LEAF = "#34d399";
+const AMBER = "#f59e0b";
+const SKY = "#38bdf8";
 const INK = "#0a0a0b";
 
 interface LocAgg {
@@ -52,17 +55,40 @@ function spotIcon(label: number, size: number): string {
   );
 }
 
+function rareIcon(size: number): string {
+  const inner = Math.round(size * 0.66);
+  return (
+    `<div style="width:${size}px;height:${size}px;display:flex;align-items:center;justify-content:center">` +
+    `<div style="width:${inner}px;height:${inner}px;background:${AMBER};border:2px solid ${INK};` +
+    `box-shadow:0 0 0 1px ${AMBER};transform:rotate(45deg)"></div></div>`
+  );
+}
+
+function hotspotIcon(size: number): string {
+  return (
+    `<div style="width:${size}px;height:${size}px;border-radius:9999px;border:2.5px solid ${SKY};` +
+    `background:rgba(56,189,248,.18);box-shadow:0 0 0 1px ${INK}"></div>`
+  );
+}
+
 export function BirdMap({
   sightings,
   namesByCode,
   filterCode,
   view,
+  notable = null,
+  hotspotSpots = null,
   fitKey = "home",
 }: {
-  sightings: SightingsFile;
+  /** null = sightings layer off. */
+  sightings: SightingsFile | null;
   namesByCode: Record<string, string>;
   filterCode: string | null;
   view: "spots" | "intensity";
+  /** null = rare layer off. */
+  notable?: NotableSighting[] | null;
+  /** null = hotspot layer off. */
+  hotspotSpots?: Hotspot[] | null;
   /** Changing this (e.g. a new area) drops the remembered pan/zoom and re-fits. */
   fitKey?: string;
 }) {
@@ -101,97 +127,172 @@ export function BirdMap({
         },
       ).addTo(map);
 
-      // ---- collect the (possibly filtered) points --------------------------
-      const codes = filterCode ? [filterCode] : Object.keys(sightings.species);
+      const fitPts: [number, number][] = [];
+
+      // ---- hotspots layer (drawn first: lowest z) ---------------------------
+      for (const h of hotspotSpots ?? []) {
+        if (h.lat === null || h.lng === null) continue;
+        fitPts.push([h.lat, h.lng]);
+        const size = 13 + Math.min(7, Math.round(h.num_species_all_time / 60));
+        const marker = L.marker([h.lat, h.lng], {
+          icon: L.divIcon({ className: "", html: hotspotIcon(size), iconSize: [size, size] }),
+          zIndexOffset: -1000,
+        });
+        const lines = [
+          `<strong>${esc(h.name)}</strong>`,
+          `<span style="color:#888">${
+            h.latest_obs ? `active ${esc(relativeObs(h.latest_obs))}` : "quiet lately"
+          } · ${h.num_species_all_time} species all-time</span>`,
+          `<a href="https://ebird.org/hotspot/${encodeURIComponent(h.loc_id)}" target="_blank" rel="noreferrer" style="color:${SKY};font-weight:600">eBird hotspot ↗</a>`,
+          `<a href="${appleMapsUrl(h.lat, h.lng)}" target="_blank" rel="noreferrer" style="color:#059669;font-weight:600"> Directions (Apple Maps) ↗</a>`,
+        ];
+        marker.bindPopup(`<div style="min-width:170px;display:grid;gap:2px">${lines.join("<br>")}</div>`);
+        marker.addTo(map);
+      }
+
+      // ---- sightings layer --------------------------------------------------
       const heatPts: [number, number, number][] = [];
-      const locs = new Map<string, LocAgg>();
-      for (const code of codes) {
-        for (const p of sightings.species[code] ?? []) {
-          heatPts.push([p.lat, p.lng, 0.7]);
-          const key = p.loc_id || `${p.lat},${p.lng}`;
-          let agg = locs.get(key);
-          if (!agg) {
-            agg = {
-              lat: p.lat,
-              lng: p.lng,
-              locName: p.loc_name,
-              reports: 0,
-              species: new Map(),
-              detail: [],
-            };
-            locs.set(key, agg);
+      if (sightings) {
+        const codes = filterCode ? [filterCode] : Object.keys(sightings.species);
+        const locs = new Map<string, LocAgg>();
+        for (const code of codes) {
+          for (const p of sightings.species[code] ?? []) {
+            heatPts.push([p.lat, p.lng, 0.7]);
+            fitPts.push([p.lat, p.lng]);
+            const key = p.loc_id || `${p.lat},${p.lng}`;
+            let agg = locs.get(key);
+            if (!agg) {
+              agg = {
+                lat: p.lat,
+                lng: p.lng,
+                locName: p.loc_name,
+                reports: 0,
+                species: new Map(),
+                detail: [],
+              };
+              locs.set(key, agg);
+            }
+            agg.reports += 1;
+            const sp = agg.species.get(code);
+            if (sp) sp.count += 1;
+            else agg.species.set(code, { obsDt: p.obs_dt, howMany: p.how_many, count: 1 });
+            if (filterCode) agg.detail.push({ obsDt: p.obs_dt, howMany: p.how_many });
           }
-          agg.reports += 1;
-          const sp = agg.species.get(code);
-          if (sp) sp.count += 1;
-          else agg.species.set(code, { obsDt: p.obs_dt, howMany: p.how_many, count: 1 });
-          if (filterCode) agg.detail.push({ obsDt: p.obs_dt, howMany: p.how_many });
+        }
+
+        if (view === "intensity") {
+          L.heatLayer(heatPts, {
+            radius: 24,
+            blur: 18,
+            maxZoom: 13,
+            minOpacity: 0.25,
+          }).addTo(map);
+        } else {
+          for (const agg of locs.values()) {
+            const label = filterCode ? agg.reports : agg.species.size;
+            const size = Math.min(34, 16 + label * (filterCode ? 2 : 0.6));
+            const marker = L.marker([agg.lat, agg.lng], {
+              icon: L.divIcon({ className: "", html: spotIcon(label, size), iconSize: [size, size] }),
+            });
+
+            const lines: string[] = [`<strong>${esc(agg.locName || "Unnamed location")}</strong>`];
+            if (filterCode) {
+              const name = namesByCode[filterCode] ?? filterCode;
+              lines.push(
+                `<span style="color:#888">${esc(name)} — ${agg.reports} report${agg.reports === 1 ? "" : "s"}</span>`,
+              );
+              for (const r of agg.detail.slice(0, 4)) {
+                lines.push(
+                  `<span style="color:#888">${esc(formatObs(r.obsDt))}${r.howMany ? ` · ${r.howMany} seen` : ""}</span>`,
+                );
+              }
+              if (agg.detail.length > 4) {
+                lines.push(`<span style="color:#888">+${agg.detail.length - 4} more reports</span>`);
+              }
+              lines.push(
+                `<a href="${BASE}/species/?code=${encodeURIComponent(filterCode)}" style="color:#059669;font-weight:600">About ${esc(name)} →</a>`,
+              );
+            } else {
+              lines.push(
+                `<span style="color:#888">${agg.species.size} species · ${agg.reports} reports</span>`,
+              );
+              const top = [...agg.species.entries()]
+                .sort((a, b) => b[1].count - a[1].count)
+                .slice(0, 5);
+              for (const [code, info] of top) {
+                const nm = esc(namesByCode[code] ?? code);
+                lines.push(
+                  `<a href="${BASE}/species/?code=${encodeURIComponent(code)}" style="color:#059669">${nm}</a> <span style="color:#888">· ${esc(formatObs(info.obsDt))}</span>`,
+                );
+              }
+              if (agg.species.size > top.length) {
+                lines.push(`<span style="color:#888">+${agg.species.size - top.length} more species</span>`);
+              }
+            }
+            lines.push(
+              `<a href="${appleMapsUrl(agg.lat, agg.lng)}" target="_blank" rel="noreferrer" style="color:#059669;font-weight:600"> Directions (Apple Maps) ↗</a>`,
+            );
+            marker.bindPopup(`<div style="min-width:170px;display:grid;gap:2px">${lines.join("<br>")}</div>`);
+            marker.addTo(map);
+          }
         }
       }
 
-      if (view === "intensity") {
-        L.heatLayer(heatPts, {
-          radius: 24,
-          blur: 18,
-          maxZoom: 13,
-          minOpacity: 0.25,
-        }).addTo(map);
-      } else {
-        for (const agg of locs.values()) {
-          const label = filterCode ? agg.reports : agg.species.size;
-          const size = Math.min(34, 16 + label * (filterCode ? 2 : 0.6));
+      // ---- rare layer (topmost: a rarity's exact spot matters) --------------
+      if (notable) {
+        interface RareAgg {
+          lat: number;
+          lng: number;
+          locName: string;
+          reports: NotableSighting[];
+        }
+        const rareLocs = new Map<string, RareAgg>();
+        for (const s of notable) {
+          if (s.lat === null || s.lng === null) continue;
+          fitPts.push([s.lat, s.lng]);
+          const key = s.loc_id || `${s.lat},${s.lng}`;
+          let agg = rareLocs.get(key);
+          if (!agg) {
+            agg = { lat: s.lat, lng: s.lng, locName: s.loc_name, reports: [] };
+            rareLocs.set(key, agg);
+          }
+          agg.reports.push(s);
+        }
+        for (const agg of rareLocs.values()) {
+          const size = Math.min(24, 15 + agg.reports.length * 1.5);
           const marker = L.marker([agg.lat, agg.lng], {
-            icon: L.divIcon({ className: "", html: spotIcon(label, size), iconSize: [size, size] }),
+            icon: L.divIcon({ className: "", html: rareIcon(size), iconSize: [size, size] }),
+            zIndexOffset: 1000,
           });
-
-          const lines: string[] = [`<strong>${esc(agg.locName || "Unnamed location")}</strong>`];
-          if (filterCode) {
-            const name = namesByCode[filterCode] ?? filterCode;
+          const lines = [`<strong>${esc(agg.locName || "Unnamed location")}</strong>`];
+          for (const r of agg.reports.slice(0, 5)) {
+            const badge = r.obs_valid
+              ? ""
+              : ` <span style="color:${AMBER};font-size:10px;text-transform:uppercase">unconfirmed</span>`;
+            const checklist = r.checklist_id
+              ? ` · <a href="https://ebird.org/checklist/${encodeURIComponent(r.checklist_id)}" target="_blank" rel="noreferrer" style="color:${AMBER}">checklist ↗</a>`
+              : "";
             lines.push(
-              `<span style="color:#888">${esc(name)} — ${agg.reports} report${agg.reports === 1 ? "" : "s"}</span>`,
+              `<a href="${BASE}/species/?code=${encodeURIComponent(r.code)}" style="color:${AMBER};font-weight:600">${esc(r.com_name)}</a>${badge}<br>` +
+                `<span style="color:#888">${esc(formatObs(r.obs_date))}${r.how_many ? ` · ${r.how_many} seen` : ""}${checklist}</span>`,
             );
-            for (const r of agg.detail.slice(0, 4)) {
-              lines.push(
-                `<span style="color:#888">${esc(formatObs(r.obsDt))}${r.howMany ? ` · ${r.howMany} seen` : ""}</span>`,
-              );
-            }
-            if (agg.detail.length > 4) {
-              lines.push(`<span style="color:#888">+${agg.detail.length - 4} more reports</span>`);
-            }
-            lines.push(
-              `<a href="${BASE}/species/?code=${encodeURIComponent(filterCode)}" style="color:#059669;font-weight:600">About ${esc(name)} →</a>`,
-            );
-          } else {
-            lines.push(
-              `<span style="color:#888">${agg.species.size} species · ${agg.reports} reports</span>`,
-            );
-            const top = [...agg.species.entries()]
-              .sort((a, b) => b[1].count - a[1].count)
-              .slice(0, 5);
-            for (const [code, info] of top) {
-              const nm = esc(namesByCode[code] ?? code);
-              lines.push(
-                `<a href="${BASE}/species/?code=${encodeURIComponent(code)}" style="color:#059669">${nm}</a> <span style="color:#888">· ${esc(formatObs(info.obsDt))}</span>`,
-              );
-            }
-            if (agg.species.size > top.length) {
-              lines.push(`<span style="color:#888">+${agg.species.size - top.length} more species</span>`);
-            }
+          }
+          if (agg.reports.length > 5) {
+            lines.push(`<span style="color:#888">+${agg.reports.length - 5} more reports</span>`);
           }
           lines.push(
             `<a href="${appleMapsUrl(agg.lat, agg.lng)}" target="_blank" rel="noreferrer" style="color:#059669;font-weight:600"> Directions (Apple Maps) ↗</a>`,
           );
-          marker.bindPopup(`<div style="min-width:170px;display:grid;gap:2px">${lines.join("<br>")}</div>`);
+          marker.bindPopup(`<div style="min-width:180px;display:grid;gap:2px">${lines.join("<br>")}</div>`);
           marker.addTo(map);
         }
       }
 
       // Restore the previous view if we have one; otherwise fit to the data.
-      const all: [number, number][] = heatPts.map((p) => [p[0], p[1]]);
       if (viewRef.current) {
         map.setView(viewRef.current.center, viewRef.current.zoom, { animate: false });
-      } else if (all.length > 0) {
-        map.fitBounds(all, { padding: [30, 30], maxZoom: 12, animate: false });
+      } else if (fitPts.length > 0) {
+        map.fitBounds(fitPts, { padding: [30, 30], maxZoom: 12, animate: false });
       }
       map.on("moveend", () => {
         if (map) {
@@ -217,14 +318,14 @@ export function BirdMap({
         map.remove();
       }
     };
-  }, [sightings, namesByCode, filterCode, view, fitKey]);
+  }, [sightings, namesByCode, filterCode, view, notable, hotspotSpots, fitKey]);
 
   return (
     <div
       ref={containerRef}
       className="h-[62vh] min-h-[380px] w-full overflow-hidden rounded-xl border border-border"
       style={{ zIndex: 0 }}
-      aria-label="Map of recent bird sightings"
+      aria-label="Map of recent bird activity"
     />
   );
 }

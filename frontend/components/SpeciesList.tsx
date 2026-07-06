@@ -17,9 +17,12 @@ interface Props {
   species: NowSpecies[];
   seasonality: Seasonality;
   index: SpeciesIndex;
+  /** False in live "anywhere" mode: days_reported_14 needs region history the
+   *  live feed can't know, so the badge and its sort are hidden. */
+  showDays14?: boolean;
 }
 
-export function SpeciesList({ species, seasonality, index }: Props) {
+export function SpeciesList({ species, seasonality, index, showDays14 = true }: Props) {
   const [query, setQuery] = useState("");
   const [sort, setSort] = useState<Sort>("recent");
   const nowWeek = currentWeek();
@@ -78,7 +81,7 @@ export function SpeciesList({ species, seasonality, index }: Props) {
           className="rounded-lg border border-border bg-surface px-2 py-2 text-sm"
         >
           <option value="recent">Most recent</option>
-          <option value="reported">Most reported</option>
+          {showDays14 && <option value="reported">Most reported</option>}
           <option value="taxonomic">Taxonomic</option>
           <option value="name">A–Z</option>
         </select>
@@ -105,12 +108,14 @@ export function SpeciesList({ species, seasonality, index }: Props) {
                     {s.how_many !== null ? ` · ${s.how_many} seen` : ""}
                   </p>
                 </div>
-                <span
-                  className="shrink-0 rounded-full bg-surface-2 px-2 py-0.5 text-xs tabular-nums text-fg"
-                  title={`Reported ${s.days_reported_14} of the last 14 days in the region history`}
-                >
-                  {s.days_reported_14}/14d
-                </span>
+                {showDays14 && (
+                  <span
+                    className="shrink-0 rounded-full bg-surface-2 px-2 py-0.5 text-xs tabular-nums text-fg"
+                    title={`Reported ${s.days_reported_14} of the last 14 days in the region history`}
+                  >
+                    {s.days_reported_14}/14d
+                  </span>
+                )}
                 {season && (
                   <span className="hidden sm:block">
                     <SeasonalityChart

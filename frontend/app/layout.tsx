@@ -3,6 +3,7 @@ import { Inter } from "next/font/google";
 
 import { LastUpdated } from "@/components/LastUpdated";
 import { Nav } from "@/components/Nav";
+import { AreaProvider } from "@/lib/area";
 import "./globals.css";
 
 const inter = Inter({ subsets: ["latin"], variable: "--font-sans" });
@@ -29,6 +30,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <script dangerouslySetInnerHTML={{ __html: themeScript }} />
       </head>
       <body className="min-h-screen font-sans antialiased">
+        <AreaProvider>
         <Nav />
         <main className="mx-auto max-w-4xl px-4 pb-16 pt-5 md:py-8">{children}</main>
         <footer className="mx-auto max-w-4xl border-t border-border px-4 py-6 text-xs text-muted">
@@ -46,6 +48,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             (Cornell Lab of Ornithology).
           </p>
         </footer>
+        </AreaProvider>
       </body>
     </html>
   );
