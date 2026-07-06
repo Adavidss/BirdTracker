@@ -335,7 +335,8 @@ function ExploreInner() {
       <p className="mb-4 mt-1 text-sm text-muted">
         Bird activity from the last {activeSightings?.window_days ?? 14} days
         {area ? ` around ${area.label} (live from eBird)` : " in the home area"}. Toggle layers,
-        tap a spot for details and directions — change the place from the 📍 picker above.
+        tap a spot for details and directions — change the place from the location picker in the
+        nav.
       </p>
 
       <div className="mb-3 flex flex-wrap items-center gap-2">

@@ -5,10 +5,12 @@ import { usePathname } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 
 import { AreaPicker } from "@/components/AreaPicker";
+import { FeatherIcon, MoonIcon, SunIcon } from "@/components/icons";
 
 const LINKS = [
   { href: "/", label: "Explore" },
   { href: "/timing", label: "Timing" },
+  { href: "/species", label: "Species" },
 ];
 
 function ThemeToggle() {
@@ -37,7 +39,7 @@ function ThemeToggle() {
       aria-label="Toggle light/dark theme"
       className="shrink-0 rounded-lg border border-border bg-surface px-2.5 py-1.5 text-sm hover:bg-surface-2"
     >
-      {mounted ? (dark ? "☀️" : "🌙") : "•"}
+      {mounted ? (dark ? <SunIcon /> : <MoonIcon />) : <span className="inline-block w-4" />}
     </button>
   );
 }
@@ -51,7 +53,7 @@ export function Nav() {
     <header className="sticky top-0 z-20 border-b border-border bg-canvas/85 backdrop-blur">
       <nav className="mx-auto flex h-14 max-w-4xl items-center gap-1 px-4 sm:gap-2">
         <Link href="/" className="mr-2 flex items-center gap-1.5 font-semibold text-strong">
-          <span aria-hidden>🪶</span>
+          <FeatherIcon size={18} className="text-leaf" />
           <span className="hidden sm:inline">BirdTracker</span>
         </Link>
         {LINKS.map(({ href, label }) => {

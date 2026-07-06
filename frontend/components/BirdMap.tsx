@@ -79,6 +79,7 @@ export function BirdMap({
   notable = null,
   hotspotSpots = null,
   fitKey = "home",
+  compact = false,
 }: {
   /** null = sightings layer off. */
   sightings: SightingsFile | null;
@@ -91,6 +92,8 @@ export function BirdMap({
   hotspotSpots?: Hotspot[] | null;
   /** Changing this (e.g. a new area) drops the remembered pan/zoom and re-fits. */
   fitKey?: string;
+  /** Shorter map for inline embeds (species pages). */
+  compact?: boolean;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   // Preserve pan/zoom across rebuilds (view toggle, filter changes)…
@@ -323,7 +326,9 @@ export function BirdMap({
   return (
     <div
       ref={containerRef}
-      className="h-[62vh] min-h-[380px] w-full overflow-hidden rounded-xl border border-border"
+      className={`w-full overflow-hidden rounded-xl border border-border ${
+        compact ? "h-[42vh] min-h-[300px]" : "h-[62vh] min-h-[380px]"
+      }`}
       style={{ zIndex: 0 }}
       aria-label="Map of recent bird activity"
     />

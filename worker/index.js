@@ -11,6 +11,8 @@
 //   /species-obs?code&lat&lng&dist&back   every recent report of one species
 //   /seasonality?lat&lng             sampled 48-week presence profile (see below)
 //   /calls?sp=Genus+species          xeno-canto recordings for one species
+//   /species-search?q=redstart       find any species in the full eBird taxonomy
+//   /species-search?code=amered      exact taxonomy record for one species code
 //
 // Deploy:   npx wrangler deploy        (from worker/)
 // Secrets:  npx wrangler secret put EBIRD_API_KEY
@@ -262,6 +264,88 @@ async function seasonality(url, env) {
   });
 }
 
+// --- /species-search — find any species in the full eBird taxonomy ------------
+//
+// The taxonomy is ~3.5MB upstream; slimmed to [code, com, sci, family, order,
+// banding] it's ~1.1MB and lives in KV for 90 days (one upstream fetch per
+// quarter). Search ranks common-name prefix > word start / banding code >
+// substring > scientific name.
+const TAXONOMY_KEY = "taxonomy:v1";
+const TAXONOMY_TTL = 90 * 86400;
+
+async function loadTaxonomy(env) {
+  if (env.COUNTER) {
+    const hit = await env.COUNTER.get(TAXONOMY_KEY, "json");
+    if (hit) return hit;
+  }
+  const r = await ebirdFetch("/ref/taxonomy/ebird?fmt=json&cat=species&locale=en", env);
+  if (!r.ok) throw new Error(`taxonomy ${r.status}`);
+  const full = await r.json();
+  const slim = full.map((t) => [
+    t.speciesCode,
+    t.comName,
+    t.sciName,
+    t.familyComName || "",
+    t.order || "",
+    (t.bandingCodes || [])[0] || "",
+  ]);
+  if (env.COUNTER) {
+    await env.COUNTER.put(TAXONOMY_KEY, JSON.stringify(slim), { expirationTtl: TAXONOMY_TTL });
+  }
+  return slim;
+}
+
+const toTaxon = (t) => ({
+  code: t[0],
+  com_name: t[1],
+  sci_name: t[2],
+  family: t[3],
+  order: t[4],
+  banding: t[5],
+});
+
+async function speciesSearch(url, env) {
+  const code = (url.searchParams.get("code") || "").trim().toLowerCase();
+  const q = (url.searchParams.get("q") || "").trim().toLowerCase();
+  if (!code && (q.length < 2 || q.length > 60)) {
+    return json({ error: "q (2+ characters) or code required" }, 400);
+  }
+
+  let taxa;
+  try {
+    taxa = await loadTaxonomy(env);
+  } catch {
+    return json({ error: "Taxonomy unavailable" }, 502);
+  }
+
+  if (code) {
+    const row = taxa.find((t) => t[0] === code);
+    return json({ results: row ? [toTaxon(row)] : [] }, 200, {
+      "Cache-Control": "public, max-age=86400",
+    });
+  }
+
+  const scored = [];
+  for (const t of taxa) {
+    const com = t[1].toLowerCase();
+    let s = -1;
+    if (com.startsWith(q)) s = 0;
+    else if (com.includes(` ${q}`) || com.includes(`-${q}`)) s = 1;
+    else if ((t[5] || "").toLowerCase() === q) s = 1; // 4-letter banding code
+    else if (com.includes(q)) s = 2;
+    else {
+      const sci = t[2].toLowerCase();
+      if (sci.startsWith(q)) s = 3;
+      else if (sci.includes(q)) s = 4;
+    }
+    if (s >= 0) scored.push([s, t]);
+  }
+  scored.sort((a, b) => a[0] - b[0] || a[1][1].length - b[1][1].length);
+  return json({ results: scored.slice(0, 12).map(([, t]) => toTaxon(t)) }, 200, {
+    "Cache-Control": "public, max-age=86400",
+  });
+}
+
 // --- /calls — xeno-canto recordings for one species ---------------------------
 //
 // xeno-canto's API v3 needs a key and sends no CORS headers, so the browser
@@ -326,6 +410,10 @@ export default {
     if (url.pathname.endsWith("/calls")) {
       const capped = await chargeCap(env, 1);
       return capped ?? calls(url, env);
+    }
+    if (url.pathname.endsWith("/species-search")) {
+      const capped = await chargeCap(env, 1);
+      return capped ?? speciesSearch(url, env);
     }
 
     const g = geoParams(url);

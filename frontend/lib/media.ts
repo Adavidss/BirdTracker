@@ -8,20 +8,23 @@ const BIRDS_API = process.env.NEXT_PUBLIC_BIRDS_API ?? "";
 
 // --- photos ---------------------------------------------------------------------
 
-export interface WikiPhoto {
-  /** ~320px thumbnail — fine for list rows. */
-  thumb: string;
-  /** Large image for the species hero. */
-  image: string;
+export interface WikiInfo {
+  /** ~320px thumbnail — fine for list rows. Null when the article has no image. */
+  thumb: string | null;
+  /** Large image for the species hero. Null when the article has no image. */
+  image: string | null;
   /** Wikipedia article to credit/link. */
   pageUrl: string;
   pageTitle: string;
+  /** Lead-section prose — the "About" text. */
+  extract: string;
 }
 
-const _photoCache = new Map<string, Promise<WikiPhoto | null>>();
+const _wikiCache = new Map<string, Promise<WikiInfo | null>>();
 
 interface WikiSummary {
   title?: string;
+  extract?: string;
   thumbnail?: { source?: string };
   originalimage?: { source?: string };
   content_urls?: { desktop?: { page?: string } };
@@ -35,29 +38,32 @@ function scaleThumb(thumbUrl: string, px: number): string {
   return /\/\d+px-/.test(thumbUrl) ? thumbUrl.replace(/\/\d+px-/, `/${px}px-`) : thumbUrl;
 }
 
-async function wikiSummary(name: string): Promise<WikiPhoto | null> {
+async function wikiSummary(name: string): Promise<WikiInfo | null> {
   const r = await fetch(
     `https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(name.replace(/ /g, "_"))}`,
   );
   if (!r.ok) return null;
   const d = (await r.json().catch(() => null)) as WikiSummary | null;
-  const thumb = d?.thumbnail?.source;
-  if (!d || !thumb || d.type === "disambiguation") return null;
+  if (!d || d.type === "disambiguation") return null;
+  const thumb = d.thumbnail?.source ?? null;
+  const extract = d.extract ?? "";
+  if (!thumb && !extract) return null;
   return {
     thumb,
-    image: scaleThumb(thumb, 960),
+    image: thumb ? scaleThumb(thumb, 960) : null,
     pageUrl:
       d.content_urls?.desktop?.page ??
       `https://en.wikipedia.org/wiki/${encodeURIComponent(name.replace(/ /g, "_"))}`,
     pageTitle: d.title ?? name,
+    extract,
   };
 }
 
-/** Photo for a species: common name first, scientific name as fallback.
- *  Resolves null when Wikipedia has neither (never throws). */
-export function fetchWikiPhoto(comName: string, sciName?: string): Promise<WikiPhoto | null> {
+/** Photo + about text for a species: common name first, scientific name as
+ *  fallback. Resolves null when Wikipedia has neither (never throws). */
+export function fetchWikiInfo(comName: string, sciName?: string): Promise<WikiInfo | null> {
   const key = `${comName}|${sciName ?? ""}`;
-  let p = _photoCache.get(key);
+  let p = _wikiCache.get(key);
   if (!p) {
     p = (async () => {
       try {
@@ -69,7 +75,7 @@ export function fetchWikiPhoto(comName: string, sciName?: string): Promise<WikiP
         return null;
       }
     })();
-    _photoCache.set(key, p);
+    _wikiCache.set(key, p);
   }
   return p;
 }

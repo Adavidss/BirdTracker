@@ -1,12 +1,13 @@
 "use client";
 
 // Compact global place picker (lives in the nav): shows the current area —
-// "⌂ Home" or the picked place — and opens a small search panel. Geocoding is
+// "Home" or the picked place — and opens a small search panel. Geocoding is
 // Open-Meteo's free keyless API; picking a place switches the whole app to
 // live eBird lookups for it.
 
 import { useEffect, useRef, useState } from "react";
 
+import { ChevronDownIcon, HomeIcon, PinIcon } from "@/components/icons";
 import { useArea } from "@/lib/area";
 import { areaFromGeo, geoLabel, liveEnabled, searchPlaces, type GeoResult } from "@/lib/live";
 
@@ -70,13 +71,15 @@ export function AreaPicker() {
             : "border-border bg-surface text-muted hover:text-fg"
         }`}
       >
-        <span aria-hidden>{area ? "📍" : "⌂"}</span>
+        {area ? (
+          <PinIcon size={14} className="shrink-0 text-leaf" />
+        ) : (
+          <HomeIcon size={14} className="shrink-0" />
+        )}
         <span className="max-w-[6.5rem] truncate sm:max-w-[11rem]">
           {area ? area.label : "Home"}
         </span>
-        <span aria-hidden className="text-xs text-muted">
-          ▾
-        </span>
+        <ChevronDownIcon size={12} className="shrink-0 text-muted" />
       </button>
       {open && (
         <div className="absolute right-0 z-40 mt-2 w-[19rem] max-w-[calc(100vw-2rem)] rounded-xl border border-border bg-surface p-2 shadow-lg">
@@ -112,11 +115,12 @@ export function AreaPicker() {
               setArea(null);
               setOpen(false);
             }}
-            className={`mt-1 w-full rounded-lg px-3 py-2 text-left text-sm ${
+            className={`mt-1 flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm ${
               area ? "text-fg hover:bg-surface-2" : "bg-surface-2 font-medium text-strong"
             }`}
           >
-            ⌂ Home area (DC / College Park)
+            <HomeIcon size={14} className="shrink-0" />
+            Home area (DC / College Park)
           </button>
         </div>
       )}
